@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const studentSchema = new mongoose.Schema({
-  studentId: { type: String, unique: true, sparse: true },
+  studentId:    { type: String, unique: true, sparse: true },
+  profileImage: { type: String },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -38,9 +39,12 @@ const studentSchema = new mongoose.Schema({
 
   documents: [
     {
-      name: { type: String },
-      fileUrl: { type: String },
-      uploadedAt: { type: Date, default: Date.now }
+      filename:     { type: String },
+      originalName: { type: String },
+      mimetype:     { type: String },
+      size:         { type: Number },
+      label:        { type: String },
+      uploadedAt:   { type: Date, default: Date.now }
     }
   ],
 

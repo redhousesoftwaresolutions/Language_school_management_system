@@ -19,8 +19,7 @@ import StudentList from './pages/admin/students/StudentList';
 import AddStudent from './pages/admin/students/AddStudent';
 import StudentDetails from './pages/admin/students/StudentDetails';
 
-import Invoices from './pages/admin/finance/Invoices';
-import Income from './pages/admin/finance/Income';
+import Finance from './pages/admin/finance/Finance';
 import Payments from './pages/admin/finance/Payments';
 
 import AddAccommodation from './pages/admin/accommodation/AddAccommodation';
@@ -65,8 +64,9 @@ function App() {
           <Route path="/admin/students" element={<Admin><StudentList /></Admin>} />
 
           {/* Finance */}
-          <Route path="/admin/finance/invoices" element={<Admin><Invoices /></Admin>} />
-          <Route path="/admin/finance/income" element={<Admin><Income /></Admin>} />
+          <Route path="/admin/finance" element={<Admin><Finance /></Admin>} />
+          <Route path="/admin/finance/invoices" element={<Admin><Finance /></Admin>} />
+          <Route path="/admin/finance/income" element={<Admin><Finance /></Admin>} />
           <Route path="/admin/finance/payments" element={<Admin><Payments /></Admin>} />
 
           {/* Accommodation */}

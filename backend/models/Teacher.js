@@ -10,7 +10,8 @@ const timetableEntrySchema = new mongoose.Schema({
 });
 
 const teacherSchema = new mongoose.Schema({
-  staffId: { type: String, unique: true, sparse: true },
+  staffId:      { type: String, unique: true, sparse: true },
+  profileImage: { type: String },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -20,6 +21,14 @@ const teacherSchema = new mongoose.Schema({
   assignedCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
   assignedStudents: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
   timetable: [timetableEntrySchema],
+  documents: [{
+    filename:     { type: String },
+    originalName: { type: String },
+    mimetype:     { type: String },
+    size:         { type: Number },
+    label:        { type: String },
+    uploadedAt:   { type: Date, default: Date.now }
+  }],
   createdAt: { type: Date, default: Date.now }
 });
 

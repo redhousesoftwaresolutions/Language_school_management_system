@@ -7,7 +7,8 @@ const incomeSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   date: { type: Date, default: Date.now },
   method: { type: String, enum: ['Bank Transfer', 'Card', 'Cash'], default: 'Bank Transfer' },
-  notes: { type: String },
+  description: { type: String },
+  notes:       { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -31,8 +31,7 @@ const navItems = [
   },
   {
     label: 'Finance', icon: <FaMoneyBillWave />, children: [
-      { label: 'Invoices', path: '/admin/finance/invoices' },
-      { label: 'Income', path: '/admin/finance/income' },
+      { label: 'Invoices & Income', path: '/admin/finance' },
       { label: 'Payments', path: '/admin/finance/payments' },
     ]
   },

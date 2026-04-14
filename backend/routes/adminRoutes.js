@@ -3,19 +3,15 @@ const router = express.Router();
 const { protect, adminOnly } = require('../middleware/auth');
 
 const {
-  getStudents,
-  getStudent,
-  createStudent,
-  updateStudent,
-  deleteStudent
+  getStudents, getStudent, createStudent, updateStudent, deleteStudent,
+  uploadStudentImage,
+  uploadStudentDoc, deleteStudentDoc,
 } = require('../controllers/studentController');
 
 const {
-  getTeachers,
-  getTeacher,
-  createTeacher,
-  updateTeacher,
-  deleteTeacher
+  getTeachers, getTeacher, createTeacher, updateTeacher, deleteTeacher,
+  uploadTeacherImage,
+  uploadTeacherDoc, deleteTeacherDoc,
 } = require('../controllers/teacherController');
 
 const {
@@ -27,11 +23,8 @@ const {
 } = require('../controllers/courseController');
 
 const {
-  getAccommodations,
-  getAccommodation,
-  createAccommodation,
-  updateAccommodation,
-  deleteAccommodation
+  getAccommodations, getAccommodation, createAccommodation, updateAccommodation, deleteAccommodation,
+  uploadAccommodationImage, deleteAccommodationImage,
 } = require('../controllers/accommodationController');
 
 const {
@@ -47,19 +40,14 @@ const {
 } = require('../controllers/timetableController');
 
 const {
-  getInvoices,
-  createInvoice,
-  updateInvoice,
-  deleteInvoice,
-  getPayments,
-  createPayment,
-  updatePayment,
-  deletePayment,
-  getIncomes,
-  createIncome,
-  updateIncome,
-  deleteIncome
+  getInvoices, createInvoice, updateInvoice, deleteInvoice,
+  getPayments, createPayment, updatePayment, deletePayment,
+  getIncomes,  createIncome,  updateIncome,  deleteIncome,
+  getExpenses, createExpense, updateExpense, deleteExpense,
+  uploadExpenseDoc, deleteExpenseDoc,
 } = require('../controllers/financeController');
+const createUpload = require('../middleware/upload');
+const { image: createImageUpload } = require('../middleware/upload');
 
 const { getSchool, updateSchool } = require('../controllers/schoolController');
 const { getEvents, createEvent, updateEvent, deleteEvent } = require('../controllers/calendarController');
@@ -118,6 +106,10 @@ router.route('/students/:id')
   .put(updateStudent)
   .delete(deleteStudent);
 
+router.post('/students/:id/image', createImageUpload('profiles/students').single('file'), uploadStudentImage);
+router.post('/students/:id/documents', createUpload('students').single('file'), uploadStudentDoc);
+router.delete('/students/:id/documents/:docId', deleteStudentDoc);
+
 // ─── Staff (Teachers) ─────────────────────────────────────────────────────────
 
 router.route('/staff')
@@ -128,6 +120,10 @@ router.route('/staff/:id')
   .get(getTeacher)
   .put(updateTeacher)
   .delete(deleteTeacher);
+
+router.post('/staff/:id/image', createImageUpload('profiles/teachers').single('file'), uploadTeacherImage);
+router.post('/staff/:id/documents', createUpload('teachers').single('file'), uploadTeacherDoc);
+router.delete('/staff/:id/documents/:docId', deleteTeacherDoc);
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
 
@@ -170,6 +166,19 @@ router.route('/finance/income/:id')
   .put(updateIncome)
   .delete(deleteIncome);
 
+// ─── Finance: Expenses ────────────────────────────────────────────────────────
+
+router.route('/finance/expenses')
+  .get(getExpenses)
+  .post(createExpense);
+
+router.route('/finance/expenses/:id')
+  .put(updateExpense)
+  .delete(deleteExpense);
+
+router.post('/finance/expenses/:id/documents', createUpload('expenses').single('file'), uploadExpenseDoc);
+router.delete('/finance/expenses/:id/documents/:docId', deleteExpenseDoc);
+
 // ─── Accommodation ────────────────────────────────────────────────────────────
 
 router.route('/accommodation')
@@ -180,6 +189,9 @@ router.route('/accommodation/:id')
   .get(getAccommodation)
   .put(updateAccommodation)
   .delete(deleteAccommodation);
+
+router.post('/accommodation/:id/images', createImageUpload('accommodation').single('file'), uploadAccommodationImage);
+router.delete('/accommodation/:id/images/:imgId', deleteAccommodationImage);
 
 // ─── Rooms ────────────────────────────────────────────────────────────────────
 

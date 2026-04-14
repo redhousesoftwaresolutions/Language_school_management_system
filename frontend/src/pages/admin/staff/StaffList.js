@@ -155,7 +155,9 @@ export default function StaffList() {
                   </td>
                   <td style={st.td}>
                     <div style={st.nameCell}>
-                      <div style={st.avatar}>{s.firstName?.[0]}</div>
+                      {s.profileImage
+                        ? <img src={`http://localhost:5000/uploads/profiles/teachers/${s.profileImage}`} alt="" style={{ ...st.avatar, objectFit: 'cover' }} />
+                        : <div style={st.avatar}>{s.firstName?.[0]}</div>}
                       {s.firstName} {s.lastName}
                     </div>
                   </td>
@@ -187,7 +189,9 @@ export default function StaffList() {
           <div style={st.modal}>
             <div style={st.modalHeader}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ ...st.avatar, width: 44, height: 44, fontSize: 18 }}>{viewItem.firstName?.[0]}</div>
+                {viewItem.profileImage
+                  ? <img src={`http://localhost:5000/uploads/profiles/teachers/${viewItem.profileImage}`} alt="" style={{ ...st.avatar, width: 44, height: 44, objectFit: 'cover' }} />
+                  : <div style={{ ...st.avatar, width: 44, height: 44, fontSize: 18 }}>{viewItem.firstName?.[0]}</div>}
                 <div>
                   <p style={st.modalName}>{viewItem.firstName} {viewItem.lastName}</p>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>

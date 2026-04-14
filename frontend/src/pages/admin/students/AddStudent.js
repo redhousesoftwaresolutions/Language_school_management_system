@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../../components/Layout';
 import Breadcrumb from '../../../components/Breadcrumb';
 import api from '../../../services/api';
-import { FaCamera, FaPlus, FaTimes } from 'react-icons/fa';
+import { FaCamera, FaPlus, FaTimes, FaUpload, FaFilePdf, FaFileWord, FaFileAlt, FaFile } from 'react-icons/fa';
 
 export default function AddStudent() {
   const { id } = useParams();
@@ -20,11 +20,16 @@ export default function AddStudent() {
     'medicalInformation.notes': '',
     enrolledCourses: []
   });
-  const [documents,   setDocuments]   = useState([]);
-  const [allCourses,  setAllCourses]   = useState([]);
-  const [docType,     setDocType]      = useState('');
-  const [error,       setError]        = useState('');
-  const [saving,      setSaving]       = useState(false);
+  const [documents,    setDocuments]    = useState([]);
+  const [queuedFiles,  setQueuedFiles]  = useState([]);
+  const [profileImage, setProfileImage] = useState(null);   // saved filename (edit)
+  const [queuedImage,  setQueuedImage]  = useState(null);   // { file, preview } (add)
+  const [allCourses,   setAllCourses]   = useState([]);
+  const [error,        setError]        = useState('');
+  const [saving,       setSaving]       = useState(false);
+  const [uploading,    setUploading]    = useState(false);
+  const fileInputRef  = useRef();
+  const imageInputRef = useRef();
 
   useEffect(() => {
     api.get('/admin/courses').then(({ data }) => setAllCourses(data)).catch(() => {});
@@ -49,6 +54,8 @@ export default function AddStudent() {
           enrolledCourses: (data.enrolledCourses || []).map(c => c._id || c)
         });
         setDocuments(data.documents || []);
+        setProfileImage(data.profileImage || null);
+        setQueuedFiles([]);
       }).catch(() => {});
     }
   }, [id, isEdit]);
@@ -78,21 +85,84 @@ export default function AddStudent() {
     },
     medicalInformation: { notes: form['medicalInformation.notes'] },
     enrolledCourses: form.enrolledCourses,
-    documents
   });
 
   const handleSubmit = async () => {
     setError(''); setSaving(true);
     try {
+      let studentId = id;
       if (isEdit) {
         await api.put(`/admin/students/${id}`, buildPayload());
       } else {
-        await api.post('/admin/students', buildPayload());
+        const { data } = await api.post('/admin/students', buildPayload());
+        studentId = data._id;
+      }
+      // Upload queued profile image
+      if (queuedImage) {
+        const fd = new FormData();
+        fd.append('file', queuedImage.file);
+        await api.post(`/admin/students/${studentId}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      // Upload any queued files
+      for (const { file, label } of queuedFiles) {
+        const fd = new FormData();
+        fd.append('file', file);
+        if (label) fd.append('label', label);
+        await api.post(`/admin/students/${studentId}/documents`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
       }
       navigate('/admin/students');
     } catch (err) {
       setError(err.response?.data?.message || 'Save failed');
     } finally { setSaving(false); }
+  };
+
+  // Edit mode: upload immediately
+  const handleFileSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    if (isEdit) {
+      setUploading(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const { data } = await api.post(`/admin/students/${id}/documents`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        setDocuments(data.documents || []);
+      } catch (err) { setError(err.response?.data?.message || 'Upload failed'); }
+      finally { setUploading(false); }
+    } else {
+      setQueuedFiles(prev => [...prev, { file, label: '' }]);
+    }
+  };
+
+  const handleDeleteDoc = async (docId) => {
+    try {
+      const { data } = await api.delete(`/admin/students/${id}/documents/${docId}`);
+      setDocuments(data.documents || []);
+    } catch { setError('Failed to delete document'); }
+  };
+
+  const removeQueued = (idx) => setQueuedFiles(prev => prev.filter((_, i) => i !== idx));
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    if (isEdit) {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const { data } = await api.post(`/admin/students/${id}/image`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setProfileImage(data.profileImage || null);
+      } catch (err) { setError('Image upload failed'); }
+    } else {
+      const preview = URL.createObjectURL(file);
+      setQueuedImage({ file, preview });
+    }
   };
 
   return (
@@ -114,7 +184,12 @@ export default function AddStudent() {
           </div>
         </div>
 
-        <div style={styles.photoBox}><FaCamera size={20} color="#aaa" /></div>
+        <label style={styles.photoBox} title="Click to upload photo">
+          {(profileImage || queuedImage)
+            ? <img src={queuedImage ? queuedImage.preview : `http://localhost:5000/uploads/profiles/students/${profileImage}`} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+            : <FaCamera size={20} color="#aaa" />}
+          <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageSelect} />
+        </label>
 
         <div style={styles.threeCol}>
           {/* Left */}
@@ -177,30 +252,63 @@ export default function AddStudent() {
               })}
             </div>
 
-            <p style={{ ...styles.sectionLabel, marginTop: 24 }}>Documents</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <select style={{ ...styles.select, flex: 1 }} value={docType} onChange={e => setDocType(e.target.value)}>
-                <option value="">Select document type</option>
-                <option>Passport</option>
-                <option>ID Card</option>
-                <option>Visa</option>
-                <option>Insurance</option>
-              </select>
-              <button style={styles.addDocBtn} onClick={() => { if (docType) { setDocuments(d => [...d, { name: docType, fileUrl: '' }]); setDocType(''); } }}>
-                <FaPlus size={10} />
-              </button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
+              <p style={{ ...styles.sectionLabel, marginTop: 0, marginBottom: 0 }}>Documents</p>
+              <label style={styles.uploadBtn}>
+                {uploading ? 'Uploading...' : <><FaUpload size={10} style={{ marginRight: 4 }} />Upload</>}
+                <input ref={fileInputRef} type="file" style={{ display: 'none' }} accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.webp" onChange={handleFileSelect} disabled={uploading || saving} />
+              </label>
             </div>
-            {documents.map((doc, i) => (
-              <div key={i} style={styles.docItem}>
-                <span style={{ fontSize: 13 }}>📄 {doc.name}</span>
-                <FaTimes size={10} style={{ cursor: 'pointer', color: '#aaa' }} onClick={() => setDocuments(documents.filter((_, j) => j !== i))} />
+            <p style={styles.docHint}>PDF, Word, images — max 10MB each</p>
+
+            {/* Saved docs (edit mode) */}
+            {documents.map(doc => (
+              <div key={doc._id} style={styles.docItem}>
+                <DocIcon mimetype={doc.mimetype} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <a href={`http://localhost:5000/uploads/students/${doc.filename}`} target="_blank" rel="noreferrer" style={styles.docLink}>{doc.originalName}</a>
+                  {doc.label && <span style={styles.docLabel}>{doc.label}</span>}
+                  <span style={styles.docMeta}>{fmtSize(doc.size)}</span>
+                </div>
+                {isEdit && <FaTimes size={10} style={{ cursor: 'pointer', color: '#ccc', flexShrink: 0 }} onClick={() => handleDeleteDoc(doc._id)} />}
               </div>
             ))}
+
+            {/* Queued files (add mode) */}
+            {queuedFiles.map((q, i) => (
+              <div key={i} style={{ ...styles.docItem, background: '#FFFBEA', border: '1px dashed #F0C040' }}>
+                <DocIcon mimetype={q.file.type} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, color: '#555', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>{q.file.name}</span>
+                  <span style={styles.docMeta}>{fmtSize(q.file.size)} · will upload on save</span>
+                </div>
+                <FaTimes size={10} style={{ cursor: 'pointer', color: '#ccc', flexShrink: 0 }} onClick={() => removeQueued(i)} />
+              </div>
+            ))}
+
+            {documents.length === 0 && queuedFiles.length === 0 && (
+              <p style={styles.noDocsMsg}>No documents yet.</p>
+            )}
           </div>
         </div>
       </div>
     </Layout>
   );
+}
+
+function fmtSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DocIcon({ mimetype }) {
+  if (!mimetype) return <FaFile size={13} color="#aaa" />;
+  if (mimetype === 'application/pdf') return <FaFilePdf size={13} color="#C62828" />;
+  if (mimetype.includes('word')) return <FaFileWord size={13} color="#1565C0" />;
+  if (mimetype.startsWith('image/')) return <FaFileAlt size={13} color="#2E7D32" />;
+  return <FaFile size={13} color="#aaa" />;
 }
 
 function Field({ label, value, onChange, type = 'text' }) {
@@ -233,7 +341,7 @@ const styles = {
   saveBtn: { background: '#3D4F7C', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 28px', cursor: 'pointer', fontSize: 13 },
   cancelBtn: { background: '#fff', color: '#555', border: '1px solid #ddd', borderRadius: 6, padding: '8px 16px', cursor: 'pointer', fontSize: 13 },
   error: { fontSize: 12, color: '#C62828' },
-  photoBox: { width: 60, height: 60, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  photoBox: { width: 80, height: 80, borderRadius: '50%', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, cursor: 'pointer', overflow: 'hidden', border: '2px dashed #ddd', flexShrink: 0 },
   threeCol: { display: 'flex', gap: 40 },
   col: { flex: 1 },
   sectionLabel: { fontSize: 13, fontWeight: 600, color: '#3D4F7C', marginBottom: 10, marginTop: 16, borderBottom: '1px solid #eee', paddingBottom: 6 },
@@ -241,8 +349,13 @@ const styles = {
   input: { width: '100%', border: 'none', borderBottom: '1px solid #ddd', outline: 'none', padding: '6px 0', fontSize: 13, background: 'transparent' },
   select: { width: '100%', border: '1px solid #ddd', borderRadius: 6, outline: 'none', padding: '7px 10px', fontSize: 13, background: '#fff' },
   permBox: { display: 'flex', alignItems: 'flex-start', gap: 10, padding: 10, background: '#F5F6FA', borderRadius: 6, marginBottom: 10 },
-  addDocBtn: { background: '#3D4F7C', color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', cursor: 'pointer' },
-  docItem: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F5F6FA', borderRadius: 6, padding: '8px 12px', marginTop: 6 },
+  uploadBtn:  { display: 'inline-flex', alignItems: 'center', background: '#F0F4FF', color: '#3D4F7C', border: '1px solid #C5D0E8', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 500 },
+  docHint:    { fontSize: 11, color: '#bbb', marginTop: 4, marginBottom: 8 },
+  docItem:    { display: 'flex', alignItems: 'center', gap: 8, background: '#F5F6FA', borderRadius: 6, padding: '7px 10px', marginTop: 5 },
+  docLink:    { display: 'block', fontSize: 12, color: '#3D4F7C', fontWeight: 500, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  docLabel:   { display: 'inline-block', background: '#EBF3FF', color: '#4A90D9', borderRadius: 4, padding: '1px 6px', fontSize: 10, marginRight: 4 },
+  docMeta:    { fontSize: 10, color: '#aaa', display: 'block' },
+  noDocsMsg:  { fontSize: 12, color: '#bbb', fontStyle: 'italic', marginTop: 8 },
   courseCheckList: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', border: '1px solid #eee', borderRadius: 6, padding: '8px 10px' },
   courseCheckItem: { display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 13, padding: '2px 0' },
   checkCode: { background: '#EBF3FF', color: '#4A90D9', borderRadius: 4, padding: '1px 6px', fontSize: 11, fontWeight: 600, marginRight: 4 },

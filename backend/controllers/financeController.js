@@ -1,6 +1,9 @@
 const Invoice = require('../models/Invoice');
 const Payment = require('../models/Payment');
-const Income = require('../models/Income');
+const Income   = require('../models/Income');
+const Expense  = require('../models/Expense');
+const fs       = require('fs');
+const path     = require('path');
 
 // ─── Helper: auto-generate reference numbers ─────────────────────────────────
 
@@ -310,17 +313,96 @@ const deleteIncome = async (req, res) => {
   }
 };
 
+// ─── EXPENSES ─────────────────────────────────────────────────────────────────
+
+const generateExpenseRef = async () => {
+  const count = await Expense.countDocuments();
+  return `EXP-${String(count + 1).padStart(3, '0')}`;
+};
+
+const getExpenses = async (req, res) => {
+  try {
+    const { search, category } = req.query;
+    let expenses = await Expense.find().sort({ createdAt: -1 });
+    if (category) expenses = expenses.filter(e => e.category === category);
+    if (search) {
+      const s = search.toLowerCase();
+      expenses = expenses.filter(e =>
+        (e.supplier || '').toLowerCase().includes(s) ||
+        (e.reference || '').toLowerCase().includes(s) ||
+        (e.description || '').toLowerCase().includes(s)
+      );
+    }
+    res.json(expenses);
+  } catch (err) { res.status(500).json({ message: 'Server error', error: err.message }); }
+};
+
+const createExpense = async (req, res) => {
+  try {
+    const reference = await generateExpenseRef();
+    const expense = await Expense.create({ ...req.body, reference });
+    res.status(201).json(expense);
+  } catch (err) { res.status(500).json({ message: 'Server error', error: err.message }); }
+};
+
+const updateExpense = async (req, res) => {
+  try {
+    delete req.body.reference;
+    const expense = await Expense.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json(expense);
+  } catch (err) { res.status(500).json({ message: 'Server error', error: err.message }); }
+};
+
+const deleteExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findByIdAndDelete(req.params.id);
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    res.json({ message: 'Expense deleted successfully' });
+  } catch (err) { res.status(500).json({ message: 'Server error', error: err.message }); }
+};
+
+// ─── Expense Documents ────────────────────────────────────────────────────────
+
+const uploadExpenseDoc = async (req, res) => {
+  try {
+    const expense = await Expense.findById(req.params.id);
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+    if (!req.file)  return res.status(400).json({ message: 'No file uploaded' });
+
+    expense.documents.push({
+      filename:     req.file.filename,
+      originalName: req.file.originalname,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+    });
+    await expense.save();
+    res.json(expense);
+  } catch (err) { res.status(500).json({ message: 'Upload failed', error: err.message }); }
+};
+
+const deleteExpenseDoc = async (req, res) => {
+  try {
+    const expense = await Expense.findById(req.params.id);
+    if (!expense) return res.status(404).json({ message: 'Expense not found' });
+
+    const doc = expense.documents.id(req.params.docId);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    // Delete file from disk
+    const filePath = path.join(__dirname, '../uploads/expenses', doc.filename);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+
+    doc.deleteOne();
+    await expense.save();
+    res.json(expense);
+  } catch (err) { res.status(500).json({ message: 'Delete failed', error: err.message }); }
+};
+
 module.exports = {
-  getInvoices,
-  createInvoice,
-  updateInvoice,
-  deleteInvoice,
-  getPayments,
-  createPayment,
-  updatePayment,
-  deletePayment,
-  getIncomes,
-  createIncome,
-  updateIncome,
-  deleteIncome
+  getInvoices, createInvoice, updateInvoice, deleteInvoice,
+  getPayments, createPayment, updatePayment, deletePayment,
+  getIncomes,  createIncome,  updateIncome,  deleteIncome,
+  getExpenses, createExpense, updateExpense, deleteExpense,
+  uploadExpenseDoc, deleteExpenseDoc,
 };

@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import Layout from '../../../components/Layout';
 import Breadcrumb from '../../../components/Breadcrumb';
 import api from '../../../services/api';
-import { FaCamera } from 'react-icons/fa';
+import { FaCamera, FaTimes } from 'react-icons/fa';
 
 export default function AddAccommodation() {
   const { id } = useParams();
   const isEdit = Boolean(id);
   const navigate = useNavigate();
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [error,        setError]       = useState('');
+  const [saving,       setSaving]      = useState(false);
+  const [images,       setImages]      = useState([]);   // saved images (edit)
+  const [queuedImages, setQueuedImages]= useState([]);   // { file, preview } (add)
+  const photoInputRef = useRef();
   const [form, setForm] = useState({
     propertyName: '', address: '', city: '', postcode: '', country: '',
     roomType: '', capacity: '', pricePerWeek: '', availableFrom: '',
@@ -22,6 +25,7 @@ export default function AddAccommodation() {
     if (isEdit) {
       api.get(`/admin/accommodation/${id}`).then(({ data }) => {
         setForm({ propertyName: data.propertyName || '', address: data.address || '', city: data.city || '', postcode: data.postcode || '', country: data.country || '', roomType: data.roomType || '', capacity: data.capacity || '', pricePerWeek: data.pricePerWeek || '', availableFrom: data.availableFrom ? data.availableFrom.slice(0,10) : '', amenities: data.amenities || '', description: data.description || '', landlordName: data.landlordName || '', landlordPhone: data.landlordPhone || '', landlordEmail: data.landlordEmail || '' });
+        setImages(data.images || []);
       }).catch(() => {});
     }
   }, [id, isEdit]);
@@ -29,13 +33,53 @@ export default function AddAccommodation() {
   const handleSubmit = async () => {
     setError(''); setSaving(true);
     try {
-      if (isEdit) await api.put(`/admin/accommodation/${id}`, form);
-      else await api.post('/admin/accommodation', form);
+      let accId = id;
+      if (isEdit) {
+        await api.put(`/admin/accommodation/${id}`, form);
+      } else {
+        const { data } = await api.post('/admin/accommodation', form);
+        accId = data._id;
+      }
+      for (const { file } of queuedImages) {
+        const fd = new FormData();
+        fd.append('file', file);
+        await api.post(`/admin/accommodation/${accId}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
       navigate('/admin/accommodation');
     } catch (err) {
       setError(err.response?.data?.message || 'Save failed');
     } finally { setSaving(false); }
   };
+
+  const handlePhotoSelect = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    if (isEdit) {
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const { data } = await api.post(`/admin/accommodation/${id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        setImages(data.images || []);
+      } catch (err) { setError('Image upload failed'); }
+    } else {
+      setQueuedImages(prev => [...prev, { file, preview: URL.createObjectURL(file) }]);
+    }
+  };
+
+  const handleDeleteImage = async (imgId) => {
+    try {
+      const { data } = await api.delete(`/admin/accommodation/${id}/images/${imgId}`);
+      setImages(data.images || []);
+    } catch { setError('Failed to delete image'); }
+  };
+
+  const removeQueuedImage = (idx) => setQueuedImages(prev => prev.filter((_, i) => i !== idx));
+
+  const allPhotos = [
+    ...images.map(img => ({ src: `http://localhost:5000/uploads/accommodation/${img.filename}`, id: img._id, saved: true })),
+    ...queuedImages.map((q, i) => ({ src: q.preview, idx: i, saved: false })),
+  ];
 
   const ROOM_TYPES = ['Single Room', 'Double Room', 'Shared Room', 'Studio', 'Apartment'];
 
@@ -58,10 +102,21 @@ export default function AddAccommodation() {
 
         {/* Photo Upload */}
         <div style={styles.photoRow}>
-          <div style={styles.photoBox}><FaCamera size={20} color="#aaa" /></div>
-          <div style={styles.photoBox}><FaCamera size={20} color="#aaa" /></div>
-          <div style={styles.photoBox}><FaCamera size={20} color="#aaa" /></div>
-          <p style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>+ Add Photos</p>
+          {allPhotos.map((photo) => (
+            <div key={photo.saved ? photo.id : `q${photo.idx}`} style={styles.photoBox}>
+              <img src={photo.src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }} />
+              <button style={styles.photoDelBtn} onClick={() => photo.saved ? handleDeleteImage(photo.id) : removeQueuedImage(photo.idx)}>
+                <FaTimes size={10} />
+              </button>
+            </div>
+          ))}
+          {allPhotos.length < 6 && (
+            <label style={{ ...styles.photoBox, cursor: 'pointer' }} title="Add photo">
+              <FaCamera size={20} color="#aaa" />
+              <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoSelect} />
+            </label>
+          )}
+          {allPhotos.length === 0 && <p style={{ fontSize: 12, color: '#aaa', alignSelf: 'center' }}>Click the box to add photos</p>}
         </div>
 
         <div style={styles.threeCol}>
@@ -127,8 +182,9 @@ const styles = {
   title: { fontSize: 18, fontWeight: 600, color: '#3D4F7C' },
   saveBtn: { background: '#3D4F7C', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 28px', cursor: 'pointer', fontSize: 13 },
   cancelBtn: { background: '#fff', color: '#3D4F7C', border: '1px solid #3D4F7C', borderRadius: 6, padding: '8px 20px', cursor: 'pointer', fontSize: 13 },
-  photoRow: { display: 'flex', gap: 12, marginBottom: 28 },
-  photoBox: { width: 80, height: 80, borderRadius: 8, background: '#f0f0f0', border: '1px dashed #ddd', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  photoRow:     { display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap', alignItems: 'center' },
+  photoBox:     { width: 100, height: 100, borderRadius: 8, background: '#f0f0f0', border: '1px dashed #ddd', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', flexShrink: 0 },
+  photoDelBtn:  { position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 },
   threeCol: { display: 'flex', gap: 40 },
   col: { flex: 1 },
   sectionLabel: { fontSize: 13, fontWeight: 600, color: '#3D4F7C', marginBottom: 14, borderBottom: '1px solid #eee', paddingBottom: 8 },
